@@ -1,0 +1,63 @@
+{
+  "name": "prism-mobile-automation",
+  "version": "1.0.0",
+  "description": "Automation framework for iOS and Android applications using Prism.",
+  "main": "src/index.js",
+  "scripts": {
+    "postinstall": "npm run setup:drivers",
+    "setup:drivers": "appium driver install uiautomator2@latest || true; appium driver install xcuitest@9.10.5 || true",
+    "appium": "appium --allow-insecure '*:chromedriver_autodownload'",
+    "test:motel6:android": "wdio wdio.motel6.android.conf.ts",
+    "test:motel6:android:simple": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/regression/simpleTest.spec.ts",
+    "test:motel6:ios": "wdio wdio.motel6.ios.conf.ts",
+    "test:motel6:ios:simple": "wdio wdio.motel6.ios.conf.ts --spec src/motel6/ios/tests/regression/simpleTest.spec.ts",
+    "test:motel6:android:login": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/regression/login.spec.ts",
+    "test:motel6:android:search": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/regression/search.spec.ts",
+    "test:motel6:android:booking": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/regression/bookingFlow.spec.ts",
+    "test:motel6:android:e2e": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/regression/endToEnd.spec.ts",
+    "test:motel6:android:homepage": "wdio wdio.motel6.android.conf.ts --spec src/motel6/android/tests/homepageTest.spec.ts",
+    "test:run": "./run-test.sh",
+    "test:homepage": "./run-test.sh src/motel6/android/tests/homepageTest.spec.ts",
+    "test:motel6:ios:login": "wdio wdio.motel6.ios.conf.ts --spec src/motel6/ios/tests/regression/login.spec.ts",
+    "test:motel6:ios:e2e": "wdio wdio.motel6.ios.conf.ts --spec src/motel6/ios/tests/regression/endToEnd.spec.ts",
+    "test:motel6:ios:prebooking": "wdio wdio.motel6.ios.conf.ts --spec src/motel6/ios/tests/regression/preBookingFlow.spec.ts",
+    "test:motel6:ios:prod": "wdio wdio.motel6.ios.conf.ts --spec src/motel6/ios/tests/regression/preBookingFlow.spec.ts",
+    "test:android": "mocha src/android/tests/*.spec.ts",
+    "test:ios": "mocha src/ios/tests/*.spec.ts",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@wdio/cli": "^8.28.0",
+    "@wdio/local-runner": "^8.28.0",
+    "@wdio/mocha-framework": "^8.28.0",
+    "@wdio/spec-reporter": "^8.28.0",
+    "appium": "^3.2.2",
+    "appium-uiautomator2-driver": "^7.1.0",
+    "appium-xcuitest-driver": "^9.10.5",
+    "webdriverio": "^8.28.0",
+    "mocha": "^10.2.0",
+    "chai": "^4.3.10",
+    "typescript": "^5.3.3",
+    "ts-node": "^10.9.2"
+  },
+  "devDependencies": {
+    "@types/mocha": "^10.0.6",
+    "@types/chai": "^4.3.11",
+    "@types/node": "^20.11.5",
+    "@wdio/types": "^8.28.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OYO/prism-mobile-automation.git"
+  },
+  "keywords": [
+    "automation",
+    "mobile",
+    "iOS",
+    "Android",
+    "testing"
+  ],
+  "author": "OYO",
+  "license": "MIT"
+}

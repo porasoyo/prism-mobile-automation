@@ -1,0 +1,7 @@
+# App binaries - don't commit these to git
+*.apk
+*.ipa
+*.app
+
+# But keep the README files
+!README.md

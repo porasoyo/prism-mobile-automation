@@ -1,0 +1,61 @@
+# Logs
+*.log
+
+# Appium page-source dumps
+appium-page-source-*.xml
+
+# Dependencies
+node_modules/
+dist/
+
+# Test Results (auto-generated)
+test-reports/screenshots/*.png
+test-reports/*.html
+test-reports/*.json
+
+# Keep folder structure
+!test-reports/.gitkeep
+!test-reports/screenshots/.gitkeep
+
+# Temporary files
+*.txt
+!RUN_THIS_NOW.txt
+
+# Archives
+*.zip
+*.tar.gz
+
+# Keep APK files
+!apps/android/*.apk
+!apps/ios/*.ipa
+
+# Unused folders (to be deleted)
+src_new/
+element_extraction/
+.backup/
+screenshots/
+
+# Runtime test artifacts
+test-artifacts/
+logs/
+
+# OS Files
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment
+.env
+.env.local
+
+# Backups
+*.old
+*.backup
