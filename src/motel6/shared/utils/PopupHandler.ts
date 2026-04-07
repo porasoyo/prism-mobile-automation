@@ -14,6 +14,13 @@ const ID_SELECTORS = [
   'id=android:id/button1',
   'id=android:id/button2',
   
+  // WELCOME POPUP "Got it" button (appears after app clear/first launch)
+  'id=com.my6.android:id/btn_got_it',
+  'id=com.my6.android:id/gotItButton', 
+  'id=com.my6.android:id/got_it',
+  'id=com.my6.android:id/btn_understood',
+  'id=com.my6.android:id/button_positive',
+  
   // App-specific dismiss buttons (Motel6)
   'id=com.my6.android:id/btn_not_now',
   'id=com.my6.android:id/btn_skip',
@@ -23,18 +30,29 @@ const ID_SELECTORS = [
   'id=com.my6.android:id/notNowButton',
 ];
 
+// Text-based selectors for fallback (catches "Got it", "OK" etc)
+// Use 'android=new UiSelector()...' format for WebdriverIO
+const TEXT_SELECTORS = [
+  'android=new UiSelector().text("Got it")',
+  'android=new UiSelector().text("GOT IT")',
+  'android=new UiSelector().text("OK")',
+  'android=new UiSelector().text("Allow")',
+  'android=new UiSelector().text("ALLOW")',
+];
+
 /**
- * Try to dismiss any visible popup using ID selectors ONLY
+ * Try to dismiss any visible popup using ID selectors first, then text selectors
  * @returns true if a popup was dismissed
  */
 export async function dismissPopupOnce(): Promise<boolean> {
+  // First try ID selectors (fastest)
   for (const selector of ID_SELECTORS) {
     try {
       const el = await $(selector);
       const exists = await el.isExisting().catch(() => false);
       if (exists) {
         await el.click();
-        console.log('✓ Dismissed popup');
+        console.log('✓ Dismissed popup (ID)');
         await driver.pause(300);
         return true;
       }
@@ -42,6 +60,23 @@ export async function dismissPopupOnce(): Promise<boolean> {
       // Continue
     }
   }
+  
+  // Then try text-based selectors (for "Got it", etc)
+  for (const selector of TEXT_SELECTORS) {
+    try {
+      const el = await $(selector);
+      const exists = await el.isExisting().catch(() => false);
+      if (exists) {
+        await el.click();
+        console.log('✓ Dismissed popup (text)');
+        await driver.pause(300);
+        return true;
+      }
+    } catch {
+      // Continue  
+    }
+  }
+  
   return false;
 }
 

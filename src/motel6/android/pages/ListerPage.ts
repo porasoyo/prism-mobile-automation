@@ -1235,19 +1235,41 @@ export class ListerPage extends BasePage {
     }
 
     // After selecting brand, click "Apply" button to confirm the selection
-    await driver.pause(500);
+    await driver.pause(800);
+    let applyClicked = false;
+    // Try ID-based selectors first (faster)
+    const applyIds = [
+      'id=com.my6.android:id/btn_apply',
+      'id=com.my6.android:id/apply_button',
+      'id=com.my6.android:id/apply',
+      'id=com.my6.android:id/btnApply',
+      'id=com.my6.android:id/button_apply',
+    ];
+    for (const sel of applyIds) {
+      try {
+        const btn = await $(sel);
+        if (await btn.isExisting().catch(() => false)) {
+          console.log(`→ Found Apply button: ${sel}`);
+          await btn.click();
+          await driver.pause(1000);
+          console.log('✓ Applied brand filter');
+          return true;
+        }
+      } catch { }
+    }
+    // Try text selectors
     try {
-      const applySelector = `android=new UiSelector().textContains("Apply")`;
+      const applySelector = `android=new UiSelector().text("Apply")`;
       const applyBtn = await $(applySelector);
       if (await applyBtn.isExisting().catch(() => false)) {
-        console.log('→ Clicking Apply button');
+        console.log('→ Clicking Apply button (text)');
         await applyBtn.click();
-        await driver.pause(1500);
+        await driver.pause(1000);
         console.log('✓ Applied brand filter');
         return true;
       }
     } catch {
-      // Try clicking "Show" or "Done" as alternative
+      // Continue to alternatives
     }
 
     // Try alternative apply buttons

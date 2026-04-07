@@ -1,11 +1,36 @@
-import type { Options } from '@wdio/types';
 import path from 'path';
+import { execSync } from 'child_process';
 
 const USE_UNICODE_IME = String(process.env.USE_UNICODE_IME ?? '').toLowerCase() === 'true';
 const APPIUM_PORT = Number(process.env.APPIUM_PORT ?? 4723);
 const UIA2_SYSTEM_PORT = Number(process.env.UIA2_SYSTEM_PORT ?? (8200 + (APPIUM_PORT % 100)));
+const DEVICE_ID = process.env.ANDROID_DEVICE || 'RZCY82GLERW';
 
-export const config: Options.Testrunner = {
+/**
+ * Cleanup stale UiAutomator2 server processes and ADB forwards.
+ * This prevents "port busy" errors on Android 16 after crashes.
+ */
+function cleanupUIA2Server() {
+  const adbPath = process.env.ANDROID_HOME 
+    ? `${process.env.ANDROID_HOME}/platform-tools/adb`
+    : 'adb';
+  
+  try {
+    // Remove all ADB forwards (stale forwards cause "port busy" errors)
+    execSync(`${adbPath} forward --remove-all 2>/dev/null || true`, { stdio: 'ignore' });
+    
+    // Stop UiAutomator2 server processes on device
+    execSync(`${adbPath} -s ${DEVICE_ID} shell "am force-stop io.appium.uiautomator2.server" 2>/dev/null || true`, { stdio: 'ignore' });
+    execSync(`${adbPath} -s ${DEVICE_ID} shell "am force-stop io.appium.uiautomator2.server.test" 2>/dev/null || true`, { stdio: 'ignore' });
+    
+    // Kill any stale instrumentation
+    execSync(`${adbPath} -s ${DEVICE_ID} shell "am instrument -w -e debug false io.appium.uiautomator2.server.test" 2>/dev/null &`, { stdio: 'ignore', timeout: 1000 });
+  } catch {
+    // Ignore errors - cleanup is best-effort
+  }
+}
+
+export const config = {
   //
   // ====================
   // Runner Configuration
@@ -32,7 +57,7 @@ export const config: Options.Testrunner = {
   maxInstances: 1,
   capabilities: [{
     platformName: 'Android' as const,
-    'appium:deviceName': process.env.ANDROID_DEVICE || 'RZCY82GLERW',
+    'appium:deviceName': DEVICE_ID,
     'appium:automationName': 'UiAutomator2' as const,
     
     // my6 app (production from Play Store)
@@ -76,6 +101,13 @@ export const config: Options.Testrunner = {
 
     // Workaround for occasional UiAutomator2 XPath2 engine crashes on some devices/OS builds
     'appium:enforceXPath1': true,
+    
+    // Android 16 stability: skip waiting for UIA2 idle (can hang on API 36)
+    'appium:skipUnlock': true,
+    // Reduce server restart attempts to fail faster on crash
+    'appium:uiautomator2ServerReadTimeout': 30000,
+    // Allow session override (helps with stale sessions)
+    'appium:allowSessionOverride': true,
   }] as any,
   
   //
@@ -97,6 +129,23 @@ export const config: Options.Testrunner = {
   // Hooks
   // =====
   services: [],
+  
+  /**
+   * Gets executed once before all workers get launched.
+   * Clean up stale UIA2 server to prevent Android 16 crashes.
+   */
+  onPrepare: function (config: any, capabilities: any) {
+    console.log('🧹 Cleaning up stale UiAutomator2 server...');
+    cleanupUIA2Server();
+  },
+  
+  /**
+   * Gets executed before a session is started (per worker).
+   */
+  beforeSession: function (config: any, capabilities: any, specs: any) {
+    // Additional per-session cleanup
+    cleanupUIA2Server();
+  },
   
   framework: 'mocha',
   reporters: ['spec'],
@@ -121,7 +170,7 @@ export const config: Options.Testrunner = {
   /**
    * Gets executed before test execution begins.
    */
-  before: function (capabilities, specs) {
+  before: function (capabilities: any, specs: any) {
     // Use 0 implicit wait; all element finding uses our explicit polling.
     // This avoids implicit-wait multiplication (which can cause 60-90s hangs).
     driver.setTimeout({ implicit: 0 });
@@ -131,7 +180,7 @@ export const config: Options.Testrunner = {
    * Gets executed after a test (in Mocha/Jasmine).
    * Only captures artifacts on FAILURE to keep reporting lean.
    */
-  afterTest: async function(test, context, { error, result, duration, passed, retries }) {
+  afterTest: async function(test: any, context: any, { error, result, duration, passed, retries }: any) {
     if (!passed && error) {
       const testName = `${test.parent}_${test.title}`;
       console.log(`\n❌ Test Failed: ${testName}`);
@@ -139,7 +188,7 @@ export const config: Options.Testrunner = {
       
       // Capture failure artifacts (screenshot + page source)
       try {
-        const { captureFailureArtifacts } = await import('./src/motel6/shared/core/Artifacts');
+        const { captureFailureArtifacts } = await import('./src/motel6/shared/core/Artifacts.js');
         await captureFailureArtifacts(testName);
         console.log(`   📸 Failure artifacts saved to test-artifacts/`);
       } catch (e) {
@@ -156,14 +205,29 @@ export const config: Options.Testrunner = {
   /**
    * Gets executed after all tests are done.
    */
-  after: function (result, capabilities, specs) {
-    // Cleanup
+  after: function (result: any, capabilities: any, specs: any) {
+    // Cleanup after each spec file
+    try {
+      cleanupUIA2Server();
+    } catch {
+      // Ignore cleanup errors
+    }
+  },
+  
+  /**
+   * Gets executed after a session is closed (per worker).
+   */
+  afterSession: function (config: any, capabilities: any, specs: any) {
+    // Clean up UIA2 server after session closes
+    cleanupUIA2Server();
   },
   
   /**
    * Gets executed after all workers got shut down and the process is about to exit.
    */
-  onComplete: function(exitCode, config, capabilities, results) {
-    console.log('All tests completed!');
+  onComplete: function(exitCode: any, config: any, capabilities: any, results: any) {
+    console.log('🧹 Final cleanup...');
+    cleanupUIA2Server();
+    console.log('✅ All tests completed!');
   },
 };

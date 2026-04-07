@@ -327,18 +327,21 @@ export class SearchPage extends BasePage {
     ios: [],
   };
 
-  private increasePetsButton: PlatformSelectors = {
+  // Pet toggle - it's a Compose element with checkable=true, within travelling_with_pets container
+  private petToggle: PlatformSelectors = {
     android: [
-      { using: 'id', value: 'com.my6.android:id/btn_increase_pet' },
+      { using: 'android uiautomator', value: 'new UiSelector().resourceId("com.my6.android:id/travelling_with_pets").childSelector(new UiSelector().checkable(true))' },
+      { using: 'android uiautomator', value: 'new UiSelector().checkable(true).className("android.view.View")' },
     ],
     ios: [],
   };
 
+  // Apply button - buttonContainer is clickable, NOT apply (which is a FrameLayout)
   private guestsApplyButton: PlatformSelectors = {
     android: [
-      { using: 'id', value: 'com.my6.android:id/apply' },
+      { using: 'id', value: 'com.my6.android:id/buttonContainer' },
+      { using: 'id', value: 'com.my6.android:id/tvTxt' },
       { using: 'android uiautomator', value: 'new UiSelector().text("Apply")' },
-      { using: 'android uiautomator', value: 'new UiSelector().text("APPLY")' },
     ],
     ios: [],
   };
@@ -798,6 +801,118 @@ export class SearchPage extends BasePage {
   }
 
   /**
+   * DEAD-SIMPLE guest picker with random values and pet toggle
+   * - Random 2-3 adults
+   * - Random 0-1 children
+   * - Random pet toggle (50% chance)
+   * - Taps Apply button
+   */
+  async setGuestsRandomWithPets(): Promise<{ adults: number; children: number; pets: boolean }> {
+    // Generate random values
+    const adults = Math.floor(Math.random() * 2) + 2; // 2-3 adults
+    const children = Math.floor(Math.random() * 2); // 0-1 children
+    const enablePets = Math.random() > 0.5; // 50% chance
+
+    console.log(`→ Setting guests: ${adults} adults, ${children} children, pets=${enablePets}`);
+
+    // Helper: get element center and tap coordinates (MUCH faster than click on Android 16)
+    const tapElementById = async (id: string, label: string): Promise<boolean> => {
+      try {
+        const el = await $(`id=${id}`);
+        if (await el.isExisting().catch(() => false)) {
+          const loc = await el.getLocation();
+          const size = await el.getSize();
+          const x = Math.round(loc.x + size.width / 2);
+          const y = Math.round(loc.y + size.height / 2);
+          await driver.touchAction([{ action: 'tap', x, y }]);
+          return true;
+        }
+      } catch { }
+      return false;
+    };
+
+    // Click guests button to open picker
+    console.log('→ DEBUG: Looking for room_block...');
+    try {
+      const opened = await tapElementById('com.my6.android:id/room_block', 'Guests button');
+      if (opened) {
+        console.log('→ DEBUG: Clicked room_block');
+      } else {
+        const altOpened = await tapElementById('com.my6.android:id/roomBlock', 'Guests button (alt)');
+        if (altOpened) console.log('→ DEBUG: Clicked roomBlock (alt)');
+      }
+      await this.sleep(600);
+    } catch (e) {
+      console.warn(`⚠️ Could not click guests button: ${String(e).substring(0, 100)}`);
+      return { adults: 1, children: 0, pets: false };
+    }
+
+    console.log('→ DEBUG: Guest picker should be open, tapping adults...');
+    
+    // Tap + for adults using coordinate tap (FAST)
+    for (let i = 0; i < adults - 1; i++) {
+      const tapped = await tapElementById('com.my6.android:id/btn_increase_adult', 'adult+');
+      if (tapped) {
+        console.log(`→ DEBUG: Tapped adult+ (${i + 1})`);
+      }
+      await this.sleep(100);
+    }
+
+    // Tap + for children using coordinate tap
+    for (let i = 0; i < children; i++) {
+      const tapped = await tapElementById('com.my6.android:id/btn_increase_child', 'child+');
+      if (tapped) {
+        console.log(`→ DEBUG: Tapped child+ (${i + 1})`);
+      }
+      await this.sleep(100);
+    }
+
+    // Toggle pets if enabled - use coordinate tap directly (fastest on Android 16)
+    if (enablePets) {
+      let petToggled = false;
+      try {
+        const petsContainer = await $('id=com.my6.android:id/travelling_with_pets');
+        if (await petsContainer.isExisting().catch(() => false)) {
+          const loc = await petsContainer.getLocation();
+          const size = await petsContainer.getSize();
+          // Tap on the right side where the toggle switch is
+          const x = Math.round(loc.x + size.width - 72);
+          const y = Math.round(loc.y + size.height / 2);
+          await driver.touchAction([{ action: 'tap', x, y }]);
+          console.log('→ DEBUG: Pet toggled via coordinate tap');
+          petToggled = true;
+        }
+      } catch { }
+      if (!petToggled) {
+        console.log('→ DEBUG: Could not find pet toggle - continuing anyway');
+      }
+      await this.sleep(100);
+    }
+
+    // Click Apply button using coordinate tap (buttonContainer is the clickable element)
+    console.log('→ DEBUG: Looking for Apply button...');
+    await this.sleep(200);
+    let applyClicked = await tapElementById('com.my6.android:id/buttonContainer', 'Apply');
+    if (applyClicked) {
+      console.log('→ DEBUG: Clicked Apply via buttonContainer tap');
+    } else {
+      // Fallback to text tap
+      applyClicked = await tapElementById('com.my6.android:id/tvTxt', 'Apply text');
+      if (applyClicked) {
+        console.log('→ DEBUG: Clicked Apply via tvTxt tap');
+      } else {
+        // Last fallback: tap bottom center
+        console.log('→ DEBUG: Fallback - tapping bottom Apply area');
+        await this.tapAtRatio(0.5, 0.88);
+      }
+    }
+    await this.sleep(400);
+
+    console.log(`✓ Guests set: ${adults} adults, ${children} children, pets=${enablePets}`);
+    return { adults, children, pets: enablePets };
+  }
+
+  /**
    * Open the rate code dropdown widget
    */
   async openRateCodeDropdown() {
@@ -1076,8 +1191,13 @@ export class SearchPage extends BasePage {
       if (typeof opts.children === 'number' && opts.children > 0) {
         await inc(this.increaseChildrenButton, opts.children, 'Increase children');
       }
+      // Pet toggle is a checkbox, not a stepper - click it if pets requested
       if (typeof opts.pets === 'number' && opts.pets > 0) {
-        await inc(this.increasePetsButton, opts.pets, 'Increase pets');
+        try {
+          await this.click(this.petToggle, 'Pet toggle', 5000);
+        } catch {
+          console.log('⚠️ Could not toggle pets');
+        }
       }
 
       try {

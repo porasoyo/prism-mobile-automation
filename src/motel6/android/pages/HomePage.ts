@@ -17,12 +17,23 @@ export class HomePage extends BasePage {
 
   private searchBar: PlatformSelectors = {
     android: [
+      // ONLY app-specific selectors - generic "Search" matches device home screen Google bar!
       { using: 'id', value: 'com.my6.android:id/home_search_bar' },
       { using: 'id', value: 'com.my6.android:id/search_bar' },
       { using: 'id', value: 'com.my6.android:id/searchBar' },
+      { using: 'id', value: 'com.my6.android:id/search_container' },
+      { using: 'android uiautomator', value: 'new UiSelector().resourceIdMatches(".*my6.*search.*")' },
       { using: 'android uiautomator', value: 'new UiSelector().textContains("Find your motel")' },
-      { using: 'android uiautomator', value: 'new UiSelector().textContains("Search")' },
-      { using: 'android uiautomator', value: 'new UiSelector().descriptionContains("search")' },
+    ],
+    ios: [],
+  };
+
+  // Bottom nav is unique to the app - use to verify app is actually running
+  private bottomNav: PlatformSelectors = {
+    android: [
+      { using: 'id', value: 'com.my6.android:id/bottom_navigation' },
+      { using: 'id', value: 'com.my6.android:id/navigation_home' },
+      { using: 'id', value: 'com.my6.android:id/navigation_account' },
     ],
     ios: [],
   };
@@ -38,13 +49,40 @@ export class HomePage extends BasePage {
   };
 
   async waitForLoaded(timeoutMs: number = 30000) {
-    // Pass criteria: we can find a search surface; logo is a bonus.
-    await this.el(this.searchBar, timeoutMs);
+    // FIRST verify we're in the Motel6 app (not device home screen)
+    // Check for bottom nav OR logo - these are unique to the app
+    let inApp = false;
     try {
-      await this.el(this.logo, 2500);
+      await this.el(this.bottomNav, 5000);
+      inApp = true;
     } catch {
-      // ignore
+      try {
+        await this.el(this.logo, 3000);
+        inApp = true;
+      } catch {
+        // Not in app yet
+      }
     }
+    
+    if (!inApp) {
+      // App might be crashed or not launched - try to activate it
+      console.log('⚠️ App not visible, attempting to activate...');
+      try {
+        // @ts-ignore
+        if (typeof driver.activateApp === 'function') {
+          // @ts-ignore
+          await driver.activateApp('com.my6.android');
+        } else {
+          await driver.execute('mobile: activateApp', { appId: 'com.my6.android' });
+        }
+        await driver.pause(2000);
+      } catch (e) {
+        console.log('⚠️ Failed to activate app:', e);
+      }
+    }
+    
+    // Now wait for search bar with remaining timeout
+    await this.el(this.searchBar, timeoutMs);
     console.log('✓ Home page looks loaded');
   }
 
