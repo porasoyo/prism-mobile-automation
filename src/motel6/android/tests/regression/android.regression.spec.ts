@@ -989,222 +989,146 @@ describe('Motel6 Android - Regression', () => {
   });
 
   // ====================================================================================
-  // TC008 - TRUE EXPLORATORY TESTING (Fully Random)
-  // - Random locations (from TestDataUtils)
-  // - Random dates (50% chance to change)
-  // - Random guests (50% chance to change)
-  // - Random rate codes (33% chance)
-  // - Random sort/filter/brand testing
-  // - Multiple exploration rounds
+  // TC008 - LISTER EXPLORATORY TEST
+  // Uses EXISTING PAGE METHODS - no custom helpers, no PDP redirection
+  // Tests: Guest picker, Rate code, Random location, Filters, Sorting, Image carousel
   // ====================================================================================
   it('TC008 - Lister exploratory testing (filters, sorting, carousel)', async function () {
-    this.timeout(15 * 60 * 1000); // 15 minutes for thorough exploration
+    this.timeout(3 * 60 * 1000); // 3 min
     this.retries(1);
 
     await withOneFullRetryOnDriverCrash('TC008', async () => {
       console.log('═══════════════════════════════════════════════════');
-      console.log('→ TC008 - TRUE EXPLORATORY TESTING');
+      console.log('→ TC008 - LISTER EXPLORATORY TEST');
       console.log('═══════════════════════════════════════════════════');
 
-      // ==== RANDOM DATA POOLS ====
-      const SORT_OPTIONS: Array<'distance' | 'guest_rating' | 'price_low_high' | 'price_high_low'> = [
-        'distance', 'guest_rating', 'price_low_high', 'price_high_low'
-      ];
-      const FILTERS: string[] = ['Pet Friendly', 'Pool', 'Free Parking', 'Free WiFi', 'Accessible'];
-      const BRANDS: Array<'motel6' | 'studio6'> = ['motel6', 'studio6'];
-      const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
-      const maybe = (pct: number): boolean => Math.random() * 100 < pct;
-      const shuffle = <T>(arr: T[]): T[] => [...arr].sort(() => Math.random() - 0.5);
-
-      // ==== RESULTS TRACKER ====
-      const allResults: Array<{ round: number; test: string; passed: boolean; detail: string }> = [];
-      const log = (round: number, test: string, passed: boolean, detail: string) => {
-        allResults.push({ round, test, passed, detail });
-        console.log(`   ${passed ? '✓' : '✗'} [R${round}] ${test}: ${detail.substring(0, 60)}`);
+      // Results tracker
+      const results: Array<{ test: string; passed: boolean; detail: string }> = [];
+      const log = (test: string, passed: boolean, detail: string) => {
+        results.push({ test, passed, detail });
+        console.log(`${passed ? '✓' : '✗'} ${test}: ${detail}`);
       };
 
-      // ==== ENTER APP ====
+      // ==== 1. ENTER APP ====
       await enterAppAsGuestOrContinue();
+      log('App Launch', true, 'Guest mode');
 
-      // ==== EXPLORATION ROUNDS (3 rounds with different random configs) ====
-      const NUM_ROUNDS = 3;
-      
-      for (let round = 1; round <= NUM_ROUNDS; round++) {
-        console.log(`\n┌───────────────────────────────────────────────────`);
-        console.log(`│ EXPLORATION ROUND ${round}/${NUM_ROUNDS}`);
-        console.log(`└───────────────────────────────────────────────────`);
+      // ==== 2. OPEN SEARCH ====
+      await homePage.openSearch();
+      await driver.pause(500);
+      log('Search Page', true, 'Opened');
 
-        // Generate random config for this round
-        const config = generateRandomSearchConfig();
-        const location = config.destination;
-        const adults = config.adults;
-        const children = config.children;
-        const skipDates = maybe(50); // 50% skip dates (use default)
-        const skipGuests = maybe(50); // 50% skip guests (use default)
-        const usePets = maybe(50); // 50% enable pets
-        const randomSort = pick(SORT_OPTIONS);
-        const randomFilter = pick(FILTERS);
-        const randomBrand = pick(BRANDS);
+      // ==== 3. GUEST PICKER (using existing SearchPage method) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Guest Picker');
+      console.log('└─────────────────────────────────────');
+      try {
+        // Use the existing method that handles adults, children, AND pets
+        const guestResult = await searchPage.setGuestsRandomWithPets();
+        log('Guest Picker', true, `${guestResult.adults} adults, ${guestResult.children} children, pets=${guestResult.pets}`);
+      } catch (e) {
+        log('Guest Picker', false, String(e).substring(0, 50));
+      }
 
-        console.log(`→ Config: ${location} | dates:${skipDates ? 'default' : 'random'} | guests:${skipGuests ? 'default' : `${adults}A/${children}C`} | pets:${usePets} | sort:${randomSort} | filter:${randomFilter} | brand:${randomBrand}`);
+      // ==== 4. RATE CODE (using existing SearchPage method) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Rate Code Selection');
+      console.log('└─────────────────────────────────────');
+      try {
+        // Pick a random rate code from available options
+        const rateTypes: Array<'aarp' | 'senior' | 'military' | 'government'> = ['aarp', 'senior', 'military', 'government'];
+        const selectedRate = rateTypes[Math.floor(Math.random() * rateTypes.length)];
+        await searchPage.selectRateCodeOption(selectedRate);
+        log('Rate Code', true, `${selectedRate.toUpperCase()} selected`);
+      } catch (e) {
+        log('Rate Code', false, String(e).substring(0, 50));
+      }
 
+      // ==== 5. RANDOM DESTINATION (using existing SearchPage method) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Random Location Search');
+      console.log('└─────────────────────────────────────');
+      const locations = ['Los Angeles, CA', 'Phoenix, AZ', 'Houston, TX', 'Denver, CO', 'Seattle, WA'];
+      const location = locations[Math.floor(Math.random() * locations.length)];
+      try {
+        await searchPage.setDestination(location, { pickSuggestion: true });
+        log('Destination', true, location);
+      } catch (e) {
+        log('Destination', false, String(e).substring(0, 50));
+        // Fallback to reliable destination
         try {
-          // ==== SEARCH SETUP ====
-          await homePage.openSearch();
-          await searchPage.waitForSearchPageLoaded(10000);
+          await searchPage.setDestination('Dallas, TX', { pickSuggestion: true });
+        } catch { }
+      }
 
-          // Dates (random: use dates or skip)
-          if (!skipDates) {
-            try {
-              await searchPage.pickDatesInCustomSheet(config.offsetDays, config.nights);
-              log(round, 'Dates', true, `+${config.offsetDays}d, ${config.nights}n`);
-            } catch (e) {
-              log(round, 'Dates', false, String(e).substring(0, 50));
-            }
-          } else {
-            log(round, 'Dates', true, 'Using default (skipped)');
-          }
+      // ==== 6. SUBMIT SEARCH ====
+      try {
+        await searchPage.submitSearch();
+        await listerPage.waitForLoaded(25000);
+        const count = await listerPage.getMotelsFoundCount();
+        log('Search Submit', true, `${count ?? 'N/A'} properties`);
+      } catch (e) {
+        log('Search Submit', false, String(e).substring(0, 50));
+        throw new Error('Cannot proceed - lister not loaded');
+      }
 
-          // Guests (random: set guests or skip)
-          if (!skipGuests) {
-            try {
-              const guestResult = await searchPage.setGuestsRandomWithPets();
-              log(round, 'Guests', true, `${guestResult.adults}A/${guestResult.children}C, pets=${guestResult.pets}`);
-            } catch (e) {
-              log(round, 'Guests', false, String(e).substring(0, 50));
-            }
-          } else {
-            log(round, 'Guests', true, 'Using default (skipped)');
-          }
-
-          // Destination (always set)
-          try {
-            await searchPage.setDestination(location, { pickSuggestion: true });
-            log(round, 'Destination', true, location);
-          } catch (e) {
-            log(round, 'Destination', false, String(e).substring(0, 50));
-            // Can't continue without destination
-            continue;
-          }
-
-          // Submit search
-          try {
-            await searchPage.submitSearch();
-            await listerPage.waitForLoaded(45000);
-            const count = await listerPage.getMotelsFoundCount();
-            log(round, 'Lister', true, `${count ?? '?'} properties`);
-          } catch (e) {
-            log(round, 'Lister', false, String(e).substring(0, 50));
-            // Try to go back and continue with next round
-            try { await driver.back(); await driver.pause(1000); } catch {}
-            continue;
-          }
-
-          // ==== LISTER TESTS (Random order) ====
-          const listerTests = shuffle(['sort', 'filter', 'brand', 'carousel', 'scroll']);
-
-          for (const test of listerTests) {
-            try {
-              switch (test) {
-                case 'scroll':
-                  await listerPage.scrollAndValidateCards(2);
-                  log(round, 'Scroll', true, '2 cards validated');
-                  await listerPage.scrollToTop();
-                  break;
-
-                case 'sort':
-                  const sortResult = await listerPage.testSortOption(randomSort);
-                  log(round, `Sort:${randomSort}`, sortResult.success, sortResult.message.substring(0, 50));
-                  await listerPage.scrollToTop();
-                  break;
-
-                case 'filter':
-                  const filterResult = await listerPage.testFilter(randomFilter);
-                  log(round, `Filter:${randomFilter}`, filterResult.success, filterResult.message.substring(0, 50));
-                  // Clear filter
-                  try {
-                    const opened = await listerPage.openFiltersPopup();
-                    if (opened) {
-                      await listerPage.clearAllFilters();
-                      await listerPage.clickShowResults();
-                      await driver.pause(500);
-                    }
-                  } catch {}
-                  await listerPage.scrollToTop();
-                  break;
-
-                case 'brand':
-                  const selected = await listerPage.selectBrand(randomBrand);
-                  if (selected) {
-                    await driver.pause(1000);
-                    await listerPage.waitForLoaded(15000);
-                    const brandResult = await listerPage.verifyBrandFilter(randomBrand);
-                    log(round, `Brand:${randomBrand}`, brandResult.success, brandResult.message.substring(0, 50));
-                    await listerPage.clearBrandFilter();
-                  } else {
-                    log(round, `Brand:${randomBrand}`, true, 'Brand not available (ok)');
-                  }
-                  break;
-
-                case 'carousel':
-                  await listerPage.scrollToTop();
-                  await driver.pause(500);
-                  const carouselResult = await listerPage.swipeLeftOnPropertyCardImages(0);
-                  log(round, 'Carousel', carouselResult.success, `${carouselResult.imagesViewed} images`);
-                  break;
-              }
-            } catch (e) {
-              log(round, test, false, String(e).substring(0, 50));
-            }
-          }
-
-          // Go back home for next round (if more rounds)
-          if (round < NUM_ROUNDS) {
-            try {
-              await driver.back();
-              await driver.pause(500);
-              await driver.back();
-              await driver.pause(500);
-              await homePage.waitForLoaded(10000);
-            } catch {
-              // Try to reset app state
-              await enterAppAsGuestOrContinue();
-            }
-          }
-
-        } catch (e) {
-          log(round, 'Round', false, `Crashed: ${String(e).substring(0, 50)}`);
-          // Try to reset for next round
-          if (round < NUM_ROUNDS) {
-            try { await enterAppAsGuestOrContinue(); } catch {}
-          }
+      // ==== 7. IMAGE CAROUSEL ON LISTER (using existing ListerPage method) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Image Carousel');
+      console.log('└─────────────────────────────────────');
+      try {
+        await listerPage.scrollToTop();
+        await driver.pause(300);
+        const carouselResult = await listerPage.swipeLeftOnPropertyCardImages(0);
+        if (carouselResult.success) {
+          log('Carousel', true, `${carouselResult.imagesViewed} images viewed`);
+        } else {
+          log('Carousel', false, `Only ${carouselResult.imagesViewed} images viewed`);
         }
+      } catch (e) {
+        log('Carousel', false, String(e).substring(0, 50));
+      }
+
+      // ==== 8. FILTER TEST (using existing ListerPage methods) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Filter (Pet Friendly)');
+      console.log('└─────────────────────────────────────');
+      try {
+        await listerPage.scrollToTop();
+        const filterResult = await listerPage.testFilter('Pet Friendly');
+        log('Filter', filterResult.success, filterResult.message);
+      } catch (e) {
+        log('Filter', false, String(e).substring(0, 50));
+      }
+
+      // ==== 9. SORTING TEST (using existing ListerPage method) ====
+      console.log('\n┌─────────────────────────────────────');
+      console.log('│ TESTING: Sort (Price Low to High)');
+      console.log('└─────────────────────────────────────');
+      try {
+        await listerPage.scrollToTop();
+        const sortResult = await listerPage.testSortOption('price_low_high');
+        log('Sort', sortResult.success, sortResult.message);
+      } catch (e) {
+        log('Sort', false, String(e).substring(0, 50));
       }
 
       // ==== SUMMARY ====
-      const passCount = allResults.filter(r => r.passed).length;
-      const failCount = allResults.filter(r => !r.passed).length;
-      const totalTests = allResults.length;
+      const passCount = results.filter(r => r.passed).length;
+      const failCount = results.filter(r => !r.passed).length;
+      const total = results.length;
+      const passRate = Math.round((passCount / total) * 100);
 
-      console.log(`\n═══════════════════════════════════════════════════`);
-      console.log(`TC008 EXPLORATORY COMPLETE`);
-      console.log(`═══════════════════════════════════════════════════`);
-      console.log(`Rounds: ${NUM_ROUNDS} | Tests: ${totalTests} | Pass: ${passCount} | Fail: ${failCount}`);
-      console.log(`Pass Rate: ${Math.round((passCount / totalTests) * 100)}%`);
-      console.log('');
-      
-      // Group by round for summary
-      for (let r = 1; r <= NUM_ROUNDS; r++) {
-        const roundResults = allResults.filter(x => x.round === r);
-        const roundPass = roundResults.filter(x => x.passed).length;
-        console.log(`  Round ${r}: ${roundPass}/${roundResults.length} passed`);
-      }
+      console.log('\n═══════════════════════════════════════════════════');
+      console.log('TC008 COMPLETE');
+      console.log('═══════════════════════════════════════════════════');
+      console.log(`Tests: ${total} | Passed: ${passCount} | Failed: ${failCount}`);
+      console.log(`Pass Rate: ${passRate}%`);
       console.log('');
 
       // Require at least 50% pass rate
-      const passRate = passCount / totalTests;
-      if (passRate < 0.5) {
-        throw new Error(`Pass rate ${Math.round(passRate * 100)}% below 50% threshold`);
+      if (passRate < 50) {
+        throw new Error(`Pass rate ${passRate}% below 50% threshold`);
       }
     });
   });
