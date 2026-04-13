@@ -801,64 +801,97 @@ export class SearchPage extends BasePage {
   }
 
   /**
-   * DEAD-SIMPLE guest picker with random values and pet toggle
-   * - Random 2-3 adults
-   * - Random 0-1 children
-   * - Random pet toggle (50% chance)
-   * - Taps Apply button
-   * OPTIMIZED: Caches element refs outside loops to avoid repeated slow lookups
+   * COORDINATE-BASED guest picker - FAST and reliable on Android 16
+   * Uses screen coordinates based on actual guest picker UI layout:
+   * - Header + tabs area: 0-20% from top
+   * - Adults row with +/- buttons: ~40% from top  
+   * - Children row with +/- buttons: ~55% from top
+   * - Pet toggle switch: ~72% from top
+   * - Apply button: ~92% from top
+   * 
+   * @param opts.adults - Number of adults (1-4, default is 1)
+   * @param opts.children - Number of children (0-4, default is 0)
+   * @param opts.pets - Whether to enable pets toggle (default: false)
    */
-  async setGuestsRandomWithPets(): Promise<{ adults: number; children: number; pets: boolean }> {
-    // Generate random values
-    const adults = Math.floor(Math.random() * 2) + 2; // 2-3 adults
-    const children = Math.floor(Math.random() * 2); // 0-1 children
-    const enablePets = Math.random() > 0.5; // 50% chance
+  async setGuestsCoordinate(opts: { adults: number; children: number; pets?: boolean }): Promise<{ adults: number; children: number; pets: boolean }> {
+    const { adults, children, pets = false } = opts;
 
-    console.log(`→ Setting guests: ${adults} adults, ${children} children, pets=${enablePets}`);
+    console.log(`→ Setting guests via coordinates: ${adults} adults, ${children} children, pets=${pets}`);
 
     // Click guests button to open picker
     try {
       const guestsBtn = await $('id=com.my6.android:id/room_block');
+      await guestsBtn.waitForExist({ timeout: 8000 });
       await guestsBtn.click();
       console.log('→ Opened guest picker');
-      await this.sleep(300);
+      await this.sleep(1200); // Wait longer for picker animation
     } catch (e) {
-      console.warn(`⚠️ Could not click guests button`);
+      console.warn(`⚠️ Could not click guests button: ${e}`);
       return { adults: 1, children: 0, pets: false };
     }
 
-    // CACHE element refs ONCE outside the loops (avoids slow repeated lookups)
-    const adultBtn = await $('id=com.my6.android:id/btn_increase_adult');
-    const childBtn = await $('id=com.my6.android:id/btn_increase_child');
-    const petsContainer = await $('id=com.my6.android:id/travelling_with_pets');
-    const applyBtn = await $('id=com.my6.android:id/buttonContainer');
+    // COORDINATE POSITIONS (based on actual screenshot UI)
+    const ADULT_PLUS_Y = 0.40;    // Adults row ~40% from top
+    const CHILD_PLUS_Y = 0.55;    // Children row ~55% from top
+    const PETS_TOGGLE_Y = 0.72;   // Pet toggle ~72% from top
+    const APPLY_BTN_Y = 0.92;     // Apply button ~92% from top
+    const PLUS_BTN_X = 0.85;      // + buttons on right side
+    const TOGGLE_X = 0.80;        // Toggle switch on right side
 
-    // Click + for adults (adults - 1 times, since 1 is default) - use cached ref
-    for (let i = 0; i < adults - 1; i++) {
-      try { await adultBtn.click(); } catch { }
-      await this.sleep(40);
+    // Tap + for adults (adults - 1 times, since 1 is default)
+    const adultTaps = Math.max(0, Math.min(adults - 1, 3)); // max 4 adults total
+    for (let i = 0; i < adultTaps; i++) {
+      await this.tapAtRatio(PLUS_BTN_X, ADULT_PLUS_Y);
+      await this.sleep(400); // Longer pause between taps
     }
-    if (adults > 1) console.log(`→ Adults: ${adults}`);
+    if (adultTaps > 0) console.log(`→ Adults +${adultTaps} = ${adults}`);
 
-    // Click + for children - use cached ref
-    for (let i = 0; i < children; i++) {
-      try { await childBtn.click(); } catch { }
-      await this.sleep(40);
+    // Pause before children
+    await this.sleep(300);
+
+    // Tap + for children  
+    const childTaps = Math.max(0, Math.min(children, 4)); // max 4 children
+    for (let i = 0; i < childTaps; i++) {
+      await this.tapAtRatio(PLUS_BTN_X, CHILD_PLUS_Y);
+      await this.sleep(400); // Longer pause between taps
     }
-    if (children > 0) console.log(`→ Children: ${children}`);
+    if (childTaps > 0) console.log(`→ Children +${childTaps} = ${children}`);
 
     // Toggle pets if enabled
-    if (enablePets) {
-      try { await petsContainer.click(); console.log('→ Pets: ON'); } catch { }
+    if (pets) {
+      await this.sleep(200);
+      await this.tapAtRatio(TOGGLE_X, PETS_TOGGLE_Y);
+      await this.sleep(250);
+      console.log('→ Pets: ON');
     }
 
-    // Click Apply button
-    await this.sleep(80);
-    try { await applyBtn.click(); console.log('→ Applied guests'); } catch { await this.tapAtRatio(0.5, 0.88); }
-    await this.sleep(200);
+    await this.sleep(400);
 
-    console.log(`✓ Guests set: ${adults} adults, ${children} children, pets=${enablePets}`);
-    return { adults, children, pets: enablePets };
+    // Tap Apply button - tap multiple positions to ensure we hit it
+    console.log('→ Tapping Apply...');
+    await this.tapAtRatio(0.50, APPLY_BTN_Y);  // First tap at 92%
+    await this.sleep(500);
+    await this.tapAtRatio(0.50, 0.90);          // Second tap at 90%
+    await this.sleep(500);
+    await this.tapAtRatio(0.50, 0.88);          // Third tap at 88%
+    await this.sleep(600);
+    
+    console.log('→ Applied guests');
+
+    console.log(`✓ Guests set: ${adults} adults, ${children} children, pets=${pets}`);
+    return { adults, children, pets };
+  }
+
+  /**
+   * Set guests with RANDOM values and pet toggle
+   * Uses coordinate-based tapping for speed on Android 16
+   */
+  async setGuestsRandomWithPets(): Promise<{ adults: number; children: number; pets: boolean }> {
+    const adults = Math.floor(Math.random() * 3) + 1; // 1-3 adults
+    const children = Math.floor(Math.random() * 3);    // 0-2 children
+    const pets = Math.random() > 0.5;                   // 50% chance
+
+    return this.setGuestsCoordinate({ adults, children, pets });
   }
 
   /**

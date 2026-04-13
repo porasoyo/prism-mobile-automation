@@ -2151,4 +2151,162 @@ export class ListerPage extends BasePage {
     // Fallback to property count
     return this.getPropertyCountFromHeader();
   }
+
+  /**
+   * Click on a property card to navigate to PDP (Property Detail Page)
+   * @param cardIndex Index of the card to click (0-based)
+   * @returns true if click successful
+   */
+  async clickPropertyCard(cardIndex: number = 0): Promise<boolean> {
+    console.log(`→ Clicking property card ${cardIndex} to open PDP...`);
+    
+    try {
+      const list = await this.getResultsListEl(10000);
+      const cards = await list.$$(`id=${this.cardContainerId}`);
+      
+      if (cards.length <= cardIndex) {
+        console.log(`⚠️ Card index ${cardIndex} not found, only ${cards.length} cards visible`);
+        return false;
+      }
+
+      const card = cards[cardIndex];
+      
+      // Click on the hotel title (most reliable target)
+      const title = await card.$('id=com.my6.android:id/hotel_title');
+      if (await title.isExisting().catch(() => false)) {
+        await title.click();
+        console.log('✓ Clicked property card title');
+        await driver.pause(1500);
+        return true;
+      }
+
+      // Fallback: click on the card container itself
+      await card.click();
+      console.log('✓ Clicked property card container');
+      await driver.pause(1500);
+      return true;
+    } catch (e) {
+      console.log(`⚠️ Error clicking property card: ${String(e).substring(0, 50)}`);
+      return false;
+    }
+  }
+
+  /**
+   * Get property card information without clicking (for validation purposes)
+   * @param cardIndex Index of the card (0-based)
+   * @returns Object with title, price, etc. or null if card not found
+   */
+  async getPropertyCardInfo(cardIndex: number = 0): Promise<{
+    title: string;
+    price: number | null;
+    priceText: string | null;
+    rateCode: string | null;
+  } | null> {
+    try {
+      const list = await this.getResultsListEl(10000);
+      const cards = await list.$$(`id=${this.cardContainerId}`);
+      
+      if (cards.length <= cardIndex) {
+        console.log(`⚠️ Card index ${cardIndex} not found, only ${cards.length} cards visible`);
+        return null;
+      }
+
+      const card = cards[cardIndex];
+      
+      // Get title
+      const title = await this.childText(card, 'com.my6.android:id/hotel_title') || 'Unknown';
+      
+      // Get price
+      const priceText = await this.childText(card, 'com.my6.android:id/hotel_avail_price');
+      let price: number | null = null;
+      if (priceText) {
+        const match = priceText.match(/\$?([\d,]+\.?\d*)/);
+        if (match) {
+          price = parseFloat(match[1].replace(/,/g, ''));
+        }
+      }
+      
+      // Get rate code badge if present
+      const rateBadgeIds = [
+        'com.my6.android:id/rate_badge',
+        'com.my6.android:id/special_rate',
+        'com.my6.android:id/promo_badge',
+      ];
+      let rateCode: string | null = null;
+      for (const id of rateBadgeIds) {
+        const text = await this.childText(card, id);
+        if (text) {
+          rateCode = text;
+          break;
+        }
+      }
+
+      return { title, price, priceText: priceText ?? null, rateCode: rateCode ?? null };
+    } catch (e) {
+      console.log(`⚠️ Error getting property card info: ${String(e).substring(0, 50)}`);
+      return null;
+    }
+  }
+
+  /**
+   * Get booking summary info from lister header/filter bar
+   * @returns Object with dates, guests, rate code info
+   */
+  async getListerBookingInfo(): Promise<{
+    datesText: string | null;
+    guestsText: string | null;
+    rateCodeText: string | null;
+  }> {
+    let datesText: string | null = null;
+    let guestsText: string | null = null;
+    let rateCodeText: string | null = null;
+
+    try {
+      // Try to get dates from filter bar
+      const datesIds = [
+        'com.my6.android:id/tv_dates',
+        'com.my6.android:id/dates_label',
+        'com.my6.android:id/filter_dates',
+      ];
+      for (const id of datesIds) {
+        const el = await $(`id=${id}`);
+        if (await el.isExisting().catch(() => false)) {
+          datesText = await el.getText().catch(() => null);
+          if (datesText) break;
+        }
+      }
+
+      // Try to get guests from filter bar
+      const guestsIds = [
+        'com.my6.android:id/tv_guests',
+        'com.my6.android:id/guests_label',
+        'com.my6.android:id/filter_guests',
+      ];
+      for (const id of guestsIds) {
+        const el = await $(`id=${id}`);
+        if (await el.isExisting().catch(() => false)) {
+          guestsText = await el.getText().catch(() => null);
+          if (guestsText) break;
+        }
+      }
+
+      // Try to get rate code indicator
+      const rateIds = [
+        'com.my6.android:id/tv_rate_code',
+        'com.my6.android:id/rate_label',
+        'com.my6.android:id/special_rate_indicator',
+      ];
+      for (const id of rateIds) {
+        const el = await $(`id=${id}`);
+        if (await el.isExisting().catch(() => false)) {
+          rateCodeText = await el.getText().catch(() => null);
+          if (rateCodeText) break;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return { datesText, guestsText, rateCodeText };
+  }
 }

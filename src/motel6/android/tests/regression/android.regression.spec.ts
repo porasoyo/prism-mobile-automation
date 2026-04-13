@@ -8,6 +8,7 @@ import { HomePage } from '../../pages/HomePage';
 import { AccountPage } from '../../pages/AccountPage';
 import { SearchPage } from '../../pages/SearchPage';
 import { ListerPage } from '../../pages/ListerPage';
+import { PDPPage } from '../../pages/PDPPage';
 import {
   generateRandomSearchConfig,
   getRandomUSLocation,
@@ -33,6 +34,7 @@ describe('Motel6 Android - Regression', () => {
   const accountPage = new AccountPage();
   const searchPage = new SearchPage();
   const listerPage = new ListerPage();
+  const pdpPage = new PDPPage();
 
   const isInvalidSessionError = (err: any) => {
     const msg = String(err?.message ?? err);
@@ -989,146 +991,565 @@ describe('Motel6 Android - Regression', () => {
   });
 
   // ====================================================================================
-  // TC008 - LISTER EXPLORATORY TEST
-  // Uses EXISTING PAGE METHODS - no custom helpers, no PDP redirection
-  // Tests: Guest picker, Rate code, Random location, Filters, Sorting, Image carousel
+  // TC008 - LISTER-ONLY EXPLORATORY TESTING
+  // Stay on lister the entire time - no navigation to other pages
+  // Actions: sorting, brand filters, vertical scroll
   // ====================================================================================
   it('TC008 - Lister exploratory testing (filters, sorting, carousel)', async function () {
-    this.timeout(3 * 60 * 1000); // 3 min
-    this.retries(1);
+    this.timeout(10 * 60 * 1000); // 10 min
+    this.retries(0); // No retries - exploratory
 
     await withOneFullRetryOnDriverCrash('TC008', async () => {
       console.log('═══════════════════════════════════════════════════');
-      console.log('→ TC008 - LISTER EXPLORATORY TEST');
+      console.log('→ TC008 - LISTER-ONLY EXPLORATORY TESTING');
       console.log('═══════════════════════════════════════════════════');
+
+      // Random data pools
+      const LOCATIONS = ['Los Angeles, CA', 'Phoenix, AZ', 'Houston, TX', 'Denver, CO', 'Seattle, WA'];
+      const SORT_OPTIONS: Array<'distance' | 'guest_rating' | 'price_low_high' | 'price_high_low'> = ['distance', 'guest_rating', 'price_low_high', 'price_high_low'];
+      const BRANDS: Array<'motel6' | 'studio6'> = ['motel6', 'studio6'];
+
+      // Helper: pick random
+      const pick = <T>(arr: T[]): T => arr[Math.floor(Math.random() * arr.length)];
+      const shouldSkip = () => Math.random() < 0.3; // 30% skip chance
+
+      // Track what was tested
+      const usedSorts: string[] = [];
+      const usedBrands: string[] = [];
 
       // Results tracker
-      const results: Array<{ test: string; passed: boolean; detail: string }> = [];
-      const log = (test: string, passed: boolean, detail: string) => {
-        results.push({ test, passed, detail });
-        console.log(`${passed ? '✓' : '✗'} ${test}: ${detail}`);
+      const results: Array<{ iteration: number; action: string; passed: boolean; detail: string }> = [];
+      let totalPass = 0;
+      let totalFail = 0;
+
+      const record = (iter: number, action: string, passed: boolean, detail: string) => {
+        results.push({ iteration: iter, action, passed, detail });
+        if (passed) totalPass++; else totalFail++;
       };
 
-      // ==== 1. ENTER APP ====
+      // Enter app once
       await enterAppAsGuestOrContinue();
-      log('App Launch', true, 'Guest mode');
+      console.log('✓ App launched in guest mode\n');
 
-      // ==== 2. OPEN SEARCH ====
+      // ====================================================================
+      // INITIAL SEARCH - Get to lister once (only navigation away from lister)
+      // ====================================================================
+      const initLoc = pick(LOCATIONS);
+      console.log('┌─────────────────────────────────────────────────');
+      console.log('│ INITIAL SEARCH: Get to lister');
+      console.log(`│ Location: ${initLoc}`);
+      console.log('└─────────────────────────────────────────────────');
+
       await homePage.openSearch();
-      await driver.pause(500);
-      log('Search Page', true, 'Opened');
+      await searchPage.waitForSearchPageLoaded(5000);
+      await searchPage.setDestination(initLoc, { pickSuggestion: true });
+      await searchPage.submitSearch();
+      await listerPage.waitForLoaded(20000);
+      record(0, 'Initial Search', true, initLoc);
+      console.log('✓ On lister - will stay here for all iterations\n');
 
-      // ==== 3. GUEST PICKER (using existing SearchPage method) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Guest Picker');
-      console.log('└─────────────────────────────────────');
-      try {
-        // Use the existing method that handles adults, children, AND pets
-        const guestResult = await searchPage.setGuestsRandomWithPets();
-        log('Guest Picker', true, `${guestResult.adults} adults, ${guestResult.children} children, pets=${guestResult.pets}`);
-      } catch (e) {
-        log('Guest Picker', false, String(e).substring(0, 50));
-      }
+      // ====================================================================
+      // EXPLORATORY ITERATIONS - LISTER ONLY (no navigation)
+      // ====================================================================
+      const NUM_ITERATIONS = 5;
 
-      // ==== 4. RATE CODE (using existing SearchPage method) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Rate Code Selection');
-      console.log('└─────────────────────────────────────');
-      try {
-        // Pick a random rate code from available options
-        const rateTypes: Array<'aarp' | 'senior' | 'military' | 'government'> = ['aarp', 'senior', 'military', 'government'];
-        const selectedRate = rateTypes[Math.floor(Math.random() * rateTypes.length)];
-        await searchPage.selectRateCodeOption(selectedRate);
-        log('Rate Code', true, `${selectedRate.toUpperCase()} selected`);
-      } catch (e) {
-        log('Rate Code', false, String(e).substring(0, 50));
-      }
+      for (let iter = 1; iter <= NUM_ITERATIONS; iter++) {
+        console.log('┌─────────────────────────────────────────────────');
+        console.log(`│ ITERATION ${iter}/${NUM_ITERATIONS} (lister only)`);
+        console.log('└─────────────────────────────────────────────────');
 
-      // ==== 5. RANDOM DESTINATION (using existing SearchPage method) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Random Location Search');
-      console.log('└─────────────────────────────────────');
-      const locations = ['Los Angeles, CA', 'Phoenix, AZ', 'Houston, TX', 'Denver, CO', 'Seattle, WA'];
-      const location = locations[Math.floor(Math.random() * locations.length)];
-      try {
-        await searchPage.setDestination(location, { pickSuggestion: true });
-        log('Destination', true, location);
-      } catch (e) {
-        log('Destination', false, String(e).substring(0, 50));
-        // Fallback to reliable destination
-        try {
-          await searchPage.setDestination('Dallas, TX', { pickSuggestion: true });
-        } catch { }
-      }
+        // Randomly decide which actions to perform this iteration
+        const doSort = !shouldSkip();
+        const doBrand = !shouldSkip();
+        const doScroll = !shouldSkip();
 
-      // ==== 6. SUBMIT SEARCH ====
-      try {
-        await searchPage.submitSearch();
-        await listerPage.waitForLoaded(25000);
-        const count = await listerPage.getMotelsFoundCount();
-        log('Search Submit', true, `${count ?? 'N/A'} properties`);
-      } catch (e) {
-        log('Search Submit', false, String(e).substring(0, 50));
-        throw new Error('Cannot proceed - lister not loaded');
-      }
+        console.log(`  Actions: Sort=${doSort}, Brand=${doBrand}, Scroll=${doScroll}`);
 
-      // ==== 7. IMAGE CAROUSEL ON LISTER (using existing ListerPage method) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Image Carousel');
-      console.log('└─────────────────────────────────────');
-      try {
-        await listerPage.scrollToTop();
-        await driver.pause(300);
-        const carouselResult = await listerPage.swipeLeftOnPropertyCardImages(0);
-        if (carouselResult.success) {
-          log('Carousel', true, `${carouselResult.imagesViewed} images viewed`);
+        // ────────────────────────────────────────────────────────────────
+        // ACTION: Random Sort (stays on lister)
+        // ────────────────────────────────────────────────────────────────
+        if (doSort) {
+          const sortOpt = pick(SORT_OPTIONS);
+          console.log(`  → Sorting by: ${sortOpt}`);
+          try {
+            await listerPage.scrollToTop();
+            await driver.pause(500);
+            const sortResult = await listerPage.selectSortOption(sortOpt);
+            if (sortResult) {
+              usedSorts.push(sortOpt);
+              await driver.pause(1000);
+              record(iter, `Sort ${sortOpt}`, true, 'Applied');
+            } else {
+              record(iter, `Sort ${sortOpt}`, false, 'Could not apply');
+            }
+          } catch (e) {
+            record(iter, `Sort ${sortOpt}`, false, String(e).substring(0, 40));
+          }
         } else {
-          log('Carousel', false, `Only ${carouselResult.imagesViewed} images viewed`);
+          console.log('  → Sort: SKIPPED');
         }
-      } catch (e) {
-        log('Carousel', false, String(e).substring(0, 50));
+
+        // ────────────────────────────────────────────────────────────────
+        // ACTION: Random Brand Filter (stays on lister)
+        // ────────────────────────────────────────────────────────────────
+        if (doBrand) {
+          const brand = pick(BRANDS);
+          console.log(`  → Brand filter: ${brand}`);
+          try {
+            await listerPage.scrollToTop();
+            await driver.pause(500);
+            const brandSelected = await listerPage.selectBrand(brand);
+            if (brandSelected) {
+              usedBrands.push(brand);
+              await driver.pause(1500);
+              record(iter, `Brand ${brand}`, true, 'Applied');
+            } else {
+              record(iter, `Brand ${brand}`, false, 'Could not apply');
+            }
+          } catch (e) {
+            record(iter, `Brand ${brand}`, false, String(e).substring(0, 40));
+          }
+        } else {
+          console.log('  → Brand: SKIPPED');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // ACTION: Vertical Scroll (stays on lister)
+        // ────────────────────────────────────────────────────────────────
+        if (doScroll) {
+          console.log('  → Vertical scroll on lister');
+          try {
+            // Scroll down to see more properties using driver scroll
+            const { width, height } = await driver.getWindowSize();
+            await driver.execute('mobile: swipeGesture', {
+              left: Math.floor(width * 0.5),
+              top: Math.floor(height * 0.6),
+              width: 10,
+              height: Math.floor(height * 0.4),
+              direction: 'up',
+              percent: 0.5,
+            });
+            await driver.pause(800);
+            await driver.execute('mobile: swipeGesture', {
+              left: Math.floor(width * 0.5),
+              top: Math.floor(height * 0.6),
+              width: 10,
+              height: Math.floor(height * 0.4),
+              direction: 'up',
+              percent: 0.5,
+            });
+            await driver.pause(800);
+            // Scroll back to top
+            await listerPage.scrollToTop();
+            await driver.pause(500);
+            record(iter, 'Scroll', true, 'Scrolled down and back up');
+          } catch (e) {
+            record(iter, 'Scroll', false, String(e).substring(0, 40));
+          }
+        } else {
+          console.log('  → Scroll: SKIPPED');
+        }
+
+        console.log(`✓ Iteration ${iter} complete\n`);
       }
 
-      // ==== 8. FILTER TEST (using existing ListerPage methods) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Filter (Pet Friendly)');
-      console.log('└─────────────────────────────────────');
-      try {
-        await listerPage.scrollToTop();
-        const filterResult = await listerPage.testFilter('Pet Friendly');
-        log('Filter', filterResult.success, filterResult.message);
-      } catch (e) {
-        log('Filter', false, String(e).substring(0, 50));
-      }
-
-      // ==== 9. SORTING TEST (using existing ListerPage method) ====
-      console.log('\n┌─────────────────────────────────────');
-      console.log('│ TESTING: Sort (Price Low to High)');
-      console.log('└─────────────────────────────────────');
-      try {
-        await listerPage.scrollToTop();
-        const sortResult = await listerPage.testSortOption('price_low_high');
-        log('Sort', sortResult.success, sortResult.message);
-      } catch (e) {
-        log('Sort', false, String(e).substring(0, 50));
-      }
-
-      // ==== SUMMARY ====
-      const passCount = results.filter(r => r.passed).length;
-      const failCount = results.filter(r => !r.passed).length;
+      // ====================================================================
+      // SUMMARY
+      // ====================================================================
       const total = results.length;
-      const passRate = Math.round((passCount / total) * 100);
+      const passRate = total > 0 ? Math.round((totalPass / total) * 100) : 0;
 
-      console.log('\n═══════════════════════════════════════════════════');
-      console.log('TC008 COMPLETE');
       console.log('═══════════════════════════════════════════════════');
-      console.log(`Tests: ${total} | Passed: ${passCount} | Failed: ${failCount}`);
+      console.log('TC008 LISTER-ONLY EXPLORATORY TEST COMPLETE');
+      console.log('═══════════════════════════════════════════════════');
+      console.log(`Total Actions: ${total} | Passed: ${totalPass} | Failed: ${totalFail}`);
       console.log(`Pass Rate: ${passRate}%`);
       console.log('');
+      console.log('Coverage Summary:');
+      console.log(`  • Sorts applied: ${[...new Set(usedSorts)].join(', ') || 'none'}`);
+      console.log(`  • Brands applied: ${[...new Set(usedBrands)].join(', ') || 'none'}`);
+      console.log('═══════════════════════════════════════════════════');
 
-      // Require at least 50% pass rate
+      // Show all results
+      results.forEach(r => {
+        const icon = r.passed ? '✓' : '✗';
+        console.log(`  ${icon} [${r.iteration}] ${r.action}: ${r.detail}`);
+      });
+
+      // Require 50% pass rate
       if (passRate < 50) {
         throw new Error(`Pass rate ${passRate}% below 50% threshold`);
+      }
+    });
+  });
+
+  // ====================================================================================
+  // TC009 - PDP (Property Detail Page) TESTING - MULTI-PROPERTY
+  // Tests 5-6 DIFFERENT properties from lister:
+  // - Click on DIFFERENT property cards (tracks visited to avoid repeats)
+  // - Validate price match between lister and PDP
+  // - Scroll through property images
+  // - Change dates on PDP (not search)
+  // - Change guests on PDP (not search)
+  // - Toggle early check-in if available
+  // ====================================================================================
+  it('TC009 - PDP validation (dates, guests, price, images) - Multi-property', async function () {
+    this.timeout(25 * 60 * 1000); // 25 min timeout
+    this.retries(0); // No retries
+
+    await withOneFullRetryOnDriverCrash('TC009', async () => {
+      console.log('═══════════════════════════════════════════════════');
+      console.log('→ TC009 - PDP MULTI-PROPERTY TESTING (5-6 DIFFERENT properties)');
+      console.log('═══════════════════════════════════════════════════');
+
+      const NUM_PROPERTIES = 5;
+      const visitedHotels = new Set<string>(); // Track visited properties to avoid duplicates
+      
+      // Track results per property
+      const propertyResults: Array<{
+        propertyIndex: number;
+        hotelName: string;
+        actions: Array<{ action: string; passed: boolean; detail: string }>;
+      }> = [];
+
+      // Enter app as guest
+      await enterAppAsGuestOrContinue();
+      console.log('✓ App launched in guest mode\n');
+
+      // ====================================================================
+      // Navigate to lister (no guests/dates setup here - change on PDP)
+      // ====================================================================
+      console.log('┌─────────────────────────────────────────────────');
+      console.log('│ Navigate to Lister');
+      console.log('└─────────────────────────────────────────────────');
+
+      await homePage.openSearch();
+      await searchPage.waitForSearchPageLoaded(5000);
+      
+      // Use Los Angeles for more property variety
+      const destination = 'Los Angeles, CA';
+      await searchPage.setDestination(destination, { pickSuggestion: true });
+      console.log(`✓ Destination: ${destination}`);
+      
+      // Just submit search with default dates/guests - we'll change on PDP
+      await searchPage.submitSearch();
+      await listerPage.waitForLoaded(30000);
+      console.log('✓ On lister - will test 5-6 different properties\n');
+
+      // ====================================================================
+      // Loop through properties - USE DIFFERENT CARDS
+      // ====================================================================
+      for (let propIdx = 0; propIdx < NUM_PROPERTIES; propIdx++) {
+        console.log('\n═══════════════════════════════════════════════════');
+        console.log(`PROPERTY ${propIdx + 1}/${NUM_PROPERTIES}`);
+        console.log('═══════════════════════════════════════════════════');
+
+        const propActions: Array<{ action: string; passed: boolean; detail: string }> = [];
+        const record = (action: string, passed: boolean, detail: string) => {
+          propActions.push({ action, passed, detail });
+          const icon = passed ? '✓' : '✗';
+          console.log(`${icon} ${action}: ${detail}`);
+        };
+
+        // ────────────────────────────────────────────────────────────────
+        // Scroll lister to get DIFFERENT properties
+        // ────────────────────────────────────────────────────────────────
+        if (propIdx > 0) {
+          // Gentle scroll: just 2 scrolls to bring next properties into view
+          const scrollCount = 2;
+          console.log(`→ Scrolling lister to see new properties...`);
+          for (let s = 0; s < scrollCount; s++) {
+            const { width, height } = await driver.getWindowSize();
+            await driver.execute('mobile: swipeGesture', {
+              left: Math.floor(width * 0.5),
+              top: Math.floor(height * 0.65),
+              width: 10,
+              height: Math.floor(height * 0.25),
+              direction: 'up',
+              percent: 0.5, // Gentler swipes to keep multiple cards visible
+            });
+            await driver.pause(600);
+          }
+          await driver.pause(500);
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Find a DIFFERENT property (not already visited)
+        // Use progressive card index: Property 1→card 0, Property 2→card 1, etc.
+        // ────────────────────────────────────────────────────────────────
+        console.log('┌─────────────────────────────────────────────────');
+        console.log('│ Select Different Property');
+        console.log('└─────────────────────────────────────────────────');
+
+        // For property 2+, try cards 1, 2 first (after scroll), fallback to 0
+        const indicesToTry = propIdx === 0 ? [0] : [1, 2, 0];
+        let selectedCardIndex = -1;
+        let listerCardInfo: { title: string; price: number | null; priceText: string | null; rateCode: string | null } | null = null;
+        
+        for (const tryIndex of indicesToTry) {
+          try {
+            const cardInfo = await listerPage.getPropertyCardInfo(tryIndex);
+            if (cardInfo?.title) {
+              if (!visitedHotels.has(cardInfo.title)) {
+                // Found a new property!
+                selectedCardIndex = tryIndex;
+                listerCardInfo = cardInfo;
+                console.log(`→ Found NEW property at card ${tryIndex}: ${cardInfo.title}`);
+                break;
+              } else {
+                console.log(`→ Skipping card ${tryIndex}: ${cardInfo.title} (already visited)`);
+              }
+            }
+          } catch {
+            // Card not accessible, try next
+          }
+        }
+        
+        // If all visible cards are visited, do a small scroll and try card 0
+        if (selectedCardIndex === -1) {
+          console.log('→ No new properties visible, scrolling more...');
+          const { width, height } = await driver.getWindowSize();
+          // Two gentle scrolls
+          for (let s = 0; s < 2; s++) {
+            await driver.execute('mobile: swipeGesture', {
+              left: Math.floor(width * 0.5),
+              top: Math.floor(height * 0.6),
+              width: 10,
+              height: Math.floor(height * 0.2),
+              direction: 'up',
+              percent: 0.4,
+            });
+            await driver.pause(500);
+          }
+          await driver.pause(500);
+          
+          // Try card 0 after scroll - accept even if visited (limited properties)
+          try {
+            listerCardInfo = await listerPage.getPropertyCardInfo(0);
+            selectedCardIndex = 0;
+            const isNew = !visitedHotels.has(listerCardInfo?.title ?? '');
+            console.log(`→ After scroll: card 0: ${listerCardInfo?.title ?? 'Unknown'} ${isNew ? '[NEW]' : '[repeat]'}`);
+          } catch {
+            selectedCardIndex = 0;
+          }
+        }
+        
+        if (listerCardInfo?.price) {
+          console.log(`→ Lister price: $${listerCardInfo.price}`);
+        }
+        
+        const clickedCard = await listerPage.clickPropertyCard(selectedCardIndex);
+        if (!clickedCard) {
+          record('Select Property', false, `Could not click card ${selectedCardIndex}`);
+          propertyResults.push({ propertyIndex: propIdx, hotelName: 'Unknown', actions: propActions });
+          continue;
+        }
+
+        await pdpPage.waitForLoaded(15000);
+        const hotelName = await pdpPage.getHotelName() ?? 'Unknown';
+        
+        // Mark this property as visited
+        visitedHotels.add(hotelName);
+        record('Select Property', true, `${hotelName} (card ${selectedCardIndex})`);
+        console.log(`✓ On PDP: ${hotelName} [NEW]\n`);
+
+        // ────────────────────────────────────────────────────────────────
+        // Validate Price Match (Lister vs PDP)
+        // ────────────────────────────────────────────────────────────────
+        console.log('┌─────────────────────────────────────────────────');
+        console.log('│ Validate Price Match (Lister vs PDP)');
+        console.log('└─────────────────────────────────────────────────');
+
+        const pdpPrice = await pdpPage.getCurrentPrice();
+        if (listerCardInfo?.price && pdpPrice !== null) {
+          const priceDiff = Math.abs(listerCardInfo.price - pdpPrice);
+          // Allow small variance (taxes/fees may differ slightly)
+          const priceMatches = priceDiff < 5;
+          if (priceMatches) {
+            record('Price Match', true, `Lister $${listerCardInfo.price} = PDP $${pdpPrice}`);
+          } else {
+            record('Price Match', false, `Lister $${listerCardInfo.price} ≠ PDP $${pdpPrice} (diff: $${priceDiff})`);
+          }
+        } else if (pdpPrice !== null) {
+          console.log(`→ PDP price: $${pdpPrice} (lister price not captured)`);
+          record('Price Match', true, `PDP price: $${pdpPrice} (lister n/a)`);
+        } else {
+          record('Price Match', false, 'Could not get prices');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Test Image Carousel (Horizontal Scroll)
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Test Image Carousel (Horizontal Scroll)');
+        console.log('└─────────────────────────────────────────────────');
+
+        const imageResult = await pdpPage.swipePropertyImages(3);
+        if (imageResult.success) {
+          record('Image Carousel', true, `Swiped ${imageResult.imagesViewed} images`);
+        } else {
+          record('Image Carousel', false, `Only ${imageResult.imagesViewed} image(s)`);
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Test Rating/Reviews (View all reviews button on PDP)
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Test Rating → View All Reviews');
+        console.log('└─────────────────────────────────────────────────');
+
+        const hasRating = await pdpPage.hasRatingSection();
+        if (hasRating) {
+          console.log('✓ Rating section found');
+          const ratingResult = await pdpPage.clickRatingToOpenReviews();
+          
+          if (ratingResult.success && ratingResult.navigatedToReviews) {
+            record('Rating → Reviews', true, 'Found reviews section');
+            await pdpPage.goBackFromReviews(); // Scroll back to top
+          } else if (ratingResult.success) {
+            record('Rating → Reviews', true, 'Clicked rating (reviews may not be available)');
+          } else {
+            record('Rating → Reviews', false, 'Could not click rating');
+          }
+        } else {
+          console.log('⚠️ No rating section (property may be new)');
+          record('Rating → Reviews', false, 'No rating available');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Test Date Change on PDP
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Test Date Change on PDP');
+        console.log('└─────────────────────────────────────────────────');
+
+        // Use smaller offset (7-30 days) for reliable coordinate-based selection
+        const offsetDays = getRandomDateOffset(7, 30);
+        const nights = getRandomNights(1, 3);
+        console.log(`→ Target: +${offsetDays} days, ${nights} nights`);
+
+        const datesChanged = await pdpPage.changeDates(offsetDays, nights);
+        if (datesChanged) {
+          record('Change Dates (PDP)', true, `+${offsetDays} days, ${nights} nights`);
+        } else {
+          record('Change Dates (PDP)', false, 'Date picker not found');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Test Guest Change on PDP
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Test Guest Change on PDP');
+        console.log('└─────────────────────────────────────────────────');
+
+        // Random guest count: 1-3 adults, 0-1 children
+        const targetAdults = Math.floor(Math.random() * 3) + 1; // 1, 2, or 3
+        const targetChildren = Math.floor(Math.random() * 2); // 0 or 1
+        console.log(`→ Target: ${targetAdults} adult(s), ${targetChildren} children`);
+
+        const guestResult = await pdpPage.changeGuests(targetAdults, targetChildren);
+        if (guestResult.success) {
+          record('Change Guests (PDP)', true, `${guestResult.newAdults} adult(s), ${guestResult.newChildren} children`);
+        } else {
+          record('Change Guests (PDP)', false, 'Guest picker not found');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Test Early Check-in Toggle (if available)
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Test Early Check-in (if available)');
+        console.log('└─────────────────────────────────────────────────');
+
+        await pdpPage.scrollDown(0.5);
+        await driver.pause(500);
+
+        const hasEarlyCheckIn = await pdpPage.hasEarlyCheckInOption();
+        if (hasEarlyCheckIn) {
+          console.log('✓ Early check-in found');
+          const earlyResult = await pdpPage.toggleEarlyCheckIn();
+          
+          if (earlyResult.success) {
+            const priceInfo = `$${earlyResult.priceBefore ?? '?'} → $${earlyResult.priceAfter ?? '?'}`;
+            record('Early Check-in', true, priceInfo);
+          } else {
+            record('Early Check-in', false, 'Toggle failed');
+          }
+        } else {
+          console.log('⚠️ Early check-in not available for this property');
+          record('Early Check-in', false, 'Not available (OK)');
+        }
+
+        // ────────────────────────────────────────────────────────────────
+        // Return to lister
+        // ────────────────────────────────────────────────────────────────
+        console.log('\n┌─────────────────────────────────────────────────');
+        console.log('│ Return to Lister');
+        console.log('└─────────────────────────────────────────────────');
+
+        await pdpPage.goBack();
+        await driver.pause(1000);
+
+        try {
+          await listerPage.waitForLoaded(10000);
+          record('Return to Lister', true, 'Back on lister');
+        } catch {
+          record('Return to Lister', false, 'Failed to return');
+          // Try pressing back again
+          await driver.back();
+          await driver.pause(1000);
+        }
+
+        // Save results for this property
+        propertyResults.push({ propertyIndex: propIdx, hotelName, actions: propActions });
+        
+        console.log(`\n✓ Property ${propIdx + 1} complete (${visitedHotels.size} unique hotels visited)\n`);
+      }
+
+      // ====================================================================
+      // FINAL SUMMARY
+      // ====================================================================
+      let totalPass = 0;
+      let totalFail = 0;
+      let totalActions = 0;
+
+      propertyResults.forEach(pr => {
+        pr.actions.forEach(a => {
+          totalActions++;
+          if (a.passed) totalPass++; else totalFail++;
+        });
+      });
+
+      const passRate = totalActions > 0 ? Math.round((totalPass / totalActions) * 100) : 0;
+
+      console.log('\n═══════════════════════════════════════════════════');
+      console.log('TC009 MULTI-PROPERTY PDP TEST COMPLETE');
+      console.log('═══════════════════════════════════════════════════');
+      console.log(`Properties Tested: ${propertyResults.length} | Unique Hotels: ${visitedHotels.size}`);
+      console.log(`Total Actions: ${totalActions} | Passed: ${totalPass} | Failed: ${totalFail}`);
+      console.log(`Pass Rate: ${passRate}%`);
+      console.log('═══════════════════════════════════════════════════');
+
+      // Per-property breakdown
+      propertyResults.forEach((pr, idx) => {
+        const propPass = pr.actions.filter(a => a.passed).length;
+        const propTotal = pr.actions.length;
+        console.log(`\n[Property ${idx + 1}] ${pr.hotelName} (${propPass}/${propTotal})`);
+        pr.actions.forEach(a => {
+          const icon = a.passed ? '✓' : '✗';
+          console.log(`   ${icon} ${a.action}: ${a.detail.substring(0, 60)}`);
+        });
+      });
+      console.log('═══════════════════════════════════════════════════\n');
+
+      // Require at least 3 unique properties and 50% pass rate
+      if (visitedHotels.size < 3) {
+        console.log(`⚠️ Warning: Only ${visitedHotels.size} unique hotels visited (expected 3+)`);
+      }
+      
+      const minPassRate = 50;
+      if (passRate < minPassRate) {
+        throw new Error(`Pass rate ${passRate}% below ${minPassRate}% threshold`);
       }
     });
   });

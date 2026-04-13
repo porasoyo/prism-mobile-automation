@@ -160,7 +160,7 @@ export const config = {
   
   mochaOpts: {
     ui: 'bdd',
-    timeout: 180000
+    timeout: 1500000  // 25 minutes - needed for TC009 multi-property tests
   },
   
   //
